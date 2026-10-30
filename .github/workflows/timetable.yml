@@ -5,6 +5,10 @@ on:
     paths:
       - 'worker.mjs'
       - 'build.mjs'
+      - 'live-client.mjs'
+      - 'live-client.test.mjs'
+      - 'calendar-client.js'
+      - 'live-sync.json'
       - 'validate.mjs'
       - 'persist-snapshot.mjs'
       - 'package.json'
