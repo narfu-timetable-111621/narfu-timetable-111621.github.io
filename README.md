@@ -1,5 +1,7 @@
 # NArFU · 111621 中俄双语课表
 
+公开课表网址：https://narfu-timetable-111621.github.io/
+
 GitHub Pages 公开网页，朋友无需登录即可使用。iPhone Safari 可添加主屏幕；包含日期周切换、点击课程展开详情、教师中俄全名、教室和地址、分组筛选及语言设置。
 
 ## 自动同步
