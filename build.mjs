@@ -33,6 +33,24 @@ page=page.replace("script.src='/preferences.js?v=6'","script.src='./preferences.
 page=page.replace("navigator.serviceWorker.register('/sw.js')","navigator.serviceWorker.register('./sw.js',{scope:'./'})");
 page=page.replace("fetch('/api/timetable'","fetch('./data/timetable.json?check='+Date.now()");
 page=page.replace('const result=await res.json();','const result=await res.json();result.fresh=!result.testFixture&&Date.now()-new Date(result.retrievedAt).getTime()<=20*60000;');
+// Loading an old publication successfully is different from a network failure.
+function status(mode,error){
+ const outdated=mode!=='fresh';
+ $('synctitle').classList.toggle('warn',outdated);
+ const labels={fresh:['已读取最新发布课表','Загружена последняя публикация'],loading:['正在读取课表','Загрузка расписания'],stale:['后台更新延迟 · 显示已保存课表','Обновление задерживается · Сохранённое расписание'],offline:['离线课表','Нет сети'],error:['课表读取失败 · 显示已保存课表','Ошибка загрузки · Сохранённое расписание']};
+ const label=labels[mode]||labels.error;$('syncstate').textContent=tr(...label);
+ $('synctime').textContent=(data?tr('学校数据获取：','Данные САФУ получены: ')+stamp(data.retrievedAt)+' MSK\n':'')+(lastSuccess?tr('网页最近读取：','Последняя загрузка: ')+stamp(new Date(lastSuccess).toISOString())+' MSK\n':'');
+ $('synctime').style.whiteSpace='pre-line';
+ const saved=data?stamp(data.retrievedAt)+' MSK':'';
+ const messages={fresh:'',loading:tr('正在读取最新发布的数据，暂显示已保存课表。','Загружаем последнюю публикацию; пока показано сохранённое расписание.'),stale:tr('后台自动更新延迟，学校数据最后获取于 '+saved+'。当前显示已保存课表；临时改课请核对学校官网。','Автообновление задерживается. Данные САФУ получены '+saved+'. Показано сохранённое расписание; срочные изменения проверьте на сайте САФУ.'),offline:tr('当前离线，显示已保存课表。重新联网后自动读取。','Нет сети. Показано сохранённое расписание; загрузка возобновится при подключении.'),error:tr('暂时无法读取课表文件，显示已保存课表。请联网后重试。','Не удалось загрузить файл расписания. Показаны сохранённые данные; проверьте подключение и повторите.')};
+ $('notice').textContent=messages[mode]??messages.error;
+ applyLanguage();
+}
+const statusPattern=/function status\(mode,error\)\{[\s\S]*?(?=\nasync function sync\(\))/;
+if(!statusPattern.test(page))throw new Error('Missing client sync status function');
+page=page.replace(statusPattern,()=>status.toString());
+page=page.replace("if(result.fresh){lastSuccess=Date.now();store.set('narfu-success',String(lastSuccess));}","lastSuccess=Date.now();store.set('narfu-success',String(lastSuccess));");
+page=page.replace("status(navigator.onLine?'stale':'offline'","status(navigator.onLine?'error':'offline'");
 page=page.replace("fetch('/calendar.ics?subgroup='+$('subgroup').value+'&language='+$('language').value", "fetch('./calendars/'+$('subgroup').value+'-'+$('language').value+'.ics'");
 page=page.replace('↻ 立即检查更新 / Обновить','↻ 获取最新课表 / Обновить');
 page=page.replace('打开页面、重新联网、返回前台（距上次检查超过 1 分钟）和前台每 5 分钟自动检查；服务器最多缓存 2 分钟。网页关闭后不持续检查，不发送通知。','后台目标每 5 分钟检查学校课表，定时检查和发布偶有延迟。打开页面、重新联网、返回前台和前台每 5 分钟读取最近发布的数据；按钮不会强制学校立即更新。数据超过 20 分钟未同步时会显示提醒。');
@@ -59,7 +77,7 @@ await fs.writeFile(path.join(output,'settings.html'),settings);
 for(const name of ['logo.svg','icon.svg','icon.png','icon-192.png','icon-512.png']){const r=await worker.fetch(new Request(base+'/'+name),{},{});if(!r.ok)throw new Error('Missing asset '+name);await fs.writeFile(path.join(output,name),Buffer.from(await r.arrayBuffer()));}
 await fs.writeFile(path.join(output,'manifest.webmanifest'),JSON.stringify({id:'./',name:'САФУ · 中俄双语课表',short_name:'NArFU课表',lang:'zh-CN',start_url:'./',scope:'./',display:'standalone',background_color:'#f5f4ee',theme_color:'#174e45',icons:[{src:'./icon-192.png?v=8',sizes:'192x192',type:'image/png',purpose:'any'},{src:'./icon-512.png?v=8',sizes:'512x512',type:'image/png',purpose:'any'}]}));
 for(const subgroup of ['all','1','2'])for(const language of ['all','ru','en','de'])await fs.writeFile(path.join(output,'calendars',subgroup+'-'+language+'.ics'),toICS(data,subgroup,language));
-const sw=`const CACHE='narfu-gh-shell-v1';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=github-1','./settings.html?v=github-1'].map(p=>new URL(p,BASE).href);
+const sw=`const CACHE='narfu-gh-shell-v2';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=github-1','./settings.html?v=github-1'].map(p=>new URL(p,BASE).href);
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));});
 self.addEventListener('activate',event=>event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('narfu-gh-shell-')&&k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));
 self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==BASE.origin||!u.pathname.startsWith(BASE.pathname)||u.pathname.includes('/data/')||u.pathname.includes('/calendars/'))return;event.respondWith(caches.open(CACHE).then(async cache=>{const saved=await cache.match(event.request);const network=fetch(event.request).then(r=>{if(r.ok){const copy=r.clone();event.waitUntil(cache.put(event.request,copy));}return r;});if(saved){event.waitUntil(network.catch(()=>{}));return saved;}return network.catch(()=>new Response('首次打开请联网 / Для первого запуска нужен Интернет',{status:503}));}));});`;
