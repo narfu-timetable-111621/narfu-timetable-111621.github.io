@@ -1,0 +1,56 @@
+name: Sync school timetable and publish
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker.mjs'
+      - 'build.mjs'
+      - 'validate.mjs'
+      - 'persist-snapshot.mjs'
+      - 'package.json'
+      - '.github/workflows/timetable.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '2/5 * * * *'
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: narfu-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read the school schedule and prepare the website
+        run: npm run build
+      - name: Validate generated website
+        run: npm run validate
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - name: Publish the verified schedule
+        id: deployment
+        uses: actions/deploy-pages@v5
+      - name: Preserve the daily or changed verified schedule
+        run: |
+          node persist-snapshot.mjs
+          git add snapshot/timetable.json
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Update verified school timetable snapshot'
+            git push
+          fi
