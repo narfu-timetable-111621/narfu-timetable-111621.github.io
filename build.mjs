@@ -77,6 +77,8 @@ page=page.replace(helpSections,`<details id="help" data-fixed-language="zh"><sum
 <button id="copybilingualcal" class="syncbtn">复制当前分组的双语订阅地址</button><p>更改上面的分组与语言筛选后，再复制对应地址到苹果“日历”的订阅日历中。</p></details>`);
 page=page.replace('<br><a href="https://ruz.narfu.ru/?timetable&group=20991" target="_blank" rel="noopener">学校课表 / Оригинал ↗</a>','');
 if(liveConfig.endpoint)page=await wireLiveSync(page,liveConfig.endpoint);
+// Keep the old GitHub link useful while using the same-origin route verified in Russia.
+page=page.replace('<script>',"<script>\nif(location.hostname==='narfu-timetable-111621.github.io'){location.replace('https://narfu-live-111621.vercel.app/');}\n");
 await fs.writeFile(path.join(output,'index.html'),page);
 const originalPref=await(await worker.fetch(new Request(base+'/preferences.js'),{},{})).text();
 const languagePart=originalPref.slice(0,originalPref.indexOf(' const selectedMinutes=')).replace('script,style,textarea,option[data-i18n-zh]','script,style,textarea,option[data-i18n-zh],[data-fixed-language]');
