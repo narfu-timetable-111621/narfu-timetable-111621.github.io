@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import worker,{SOURCE,parseTimetable,enrichEvent,toICS} from './worker.mjs';
+import {wireLiveSync} from './live-client.mjs';
+const liveConfig=JSON.parse(await fs.readFile(new URL('./live-sync.json',import.meta.url),'utf8'));
 const root=path.resolve(import.meta.dirname);
 const output=path.join(root,'docs');
 await fs.mkdir(path.join(output,'data'),{recursive:true});
@@ -74,6 +76,7 @@ page=page.replace(helpSections,`<details id="help" data-fixed-language="zh"><sum
 <p>双语自动订阅：按当前分组选择生成专用日历地址，只覆盖学校网页当前六周。苹果决定订阅刷新时间。</p><a class="calendarlink" id="bilingualcal" href="./calendars/all-all.ics">双语订阅地址</a>
 <button id="copybilingualcal" class="syncbtn">复制当前分组的双语订阅地址</button><p>更改上面的分组与语言筛选后，再复制对应地址到苹果“日历”的订阅日历中。</p></details>`);
 page=page.replace('<br><a href="https://ruz.narfu.ru/?timetable&group=20991" target="_blank" rel="noopener">学校课表 / Оригинал ↗</a>','');
+if(liveConfig.endpoint)page=await wireLiveSync(page,liveConfig.endpoint);
 await fs.writeFile(path.join(output,'index.html'),page);
 const originalPref=await(await worker.fetch(new Request(base+'/preferences.js'),{},{})).text();
 const languagePart=originalPref.slice(0,originalPref.indexOf(' const selectedMinutes=')).replace('script,style,textarea,option[data-i18n-zh]','script,style,textarea,option[data-i18n-zh],[data-fixed-language]');
@@ -90,9 +93,9 @@ await fs.writeFile(path.join(output,'settings.html'),settings);
 for(const name of ['logo.svg','icon.svg','icon.png','icon-192.png','icon-512.png']){const r=await worker.fetch(new Request(base+'/'+name),{},{});if(!r.ok)throw new Error('Missing asset '+name);await fs.writeFile(path.join(output,name),Buffer.from(await r.arrayBuffer()));}
 await fs.writeFile(path.join(output,'manifest.webmanifest'),JSON.stringify({id:'./',name:'САФУ · 中俄双语课表',short_name:'NArFU课表',lang:'zh-CN',start_url:'./',scope:'./',display:'standalone',background_color:'#f5f4ee',theme_color:'#174e45',icons:[{src:'./icon-192.png?v=8',sizes:'192x192',type:'image/png',purpose:'any'},{src:'./icon-512.png?v=8',sizes:'512x512',type:'image/png',purpose:'any'}]}));
 for(const subgroup of ['all','1','2'])for(const language of ['all','ru','en','de'])await fs.writeFile(path.join(output,'calendars',subgroup+'-'+language+'.ics'),toICS(data,subgroup,language));
-const sw=`const CACHE='narfu-gh-shell-v3';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=github-2','./settings.html?v=github-2'].map(p=>new URL(p,BASE).href);
+const sw=`const CACHE='narfu-gh-shell-${liveConfig.endpoint?'v4':'v3'}';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=github-2','./settings.html?v=github-2'].map(p=>new URL(p,BASE).href);
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));});
-self.addEventListener('activate',event=>event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('narfu-gh-shell-')&&k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));
+self.addEventListener('activate',event=>event.waitUntil((async()=>{const keys=await caches.keys(),old=keys.filter(k=>k.startsWith('narfu-gh-shell-')&&k!==CACHE);await Promise.all(old.map(k=>caches.delete(k)));await self.clients.claim();if(${!!liveConfig.endpoint}&&old.length){const windows=await self.clients.matchAll({type:'window'});await Promise.all(windows.map(client=>client.navigate(client.url).catch(()=>{})));}})()));
 self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==BASE.origin||!u.pathname.startsWith(BASE.pathname)||u.pathname.includes('/data/')||u.pathname.includes('/calendars/'))return;event.respondWith(caches.open(CACHE).then(async cache=>{const saved=await cache.match(event.request);const network=fetch(event.request).then(r=>{if(r.ok){const copy=r.clone();event.waitUntil(cache.put(event.request,copy));}return r;});if(saved){event.waitUntil(network.catch(()=>{}));return saved;}return network.catch(()=>new Response('首次打开请联网 / Для первого запуска нужен Интернет',{status:503}));}));});`;
 await fs.writeFile(path.join(output,'sw.js'),sw);await fs.writeFile(path.join(output,'.nojekyll'),'');
 await fs.writeFile(path.join(output,'robots.txt'),'User-agent: *\nDisallow: /\n');
