@@ -1,0 +1,12 @@
+{
+  "name": "narfu-bilingual-timetable",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "validate": "node validate.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
