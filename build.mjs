@@ -29,7 +29,7 @@ const seed={...data,weeks:[start],days:data.days.filter(d=>d>=start&&d<=end),eve
 page=page.replace(/^const BOOTSTRAP_DATA=.+;$/m,'const BOOTSTRAP_DATA='+JSON.stringify(seed)+';');
 // Every local resource is relative, for both organization roots and project sites.
 page=page.replaceAll('src="/','src="./').replaceAll('href="/','href="./');
-page=page.replace("script.src='/preferences.js?v=6'","script.src='./preferences.js?v=github-1'");
+page=page.replace("script.src='/preferences.js?v=6'","script.src='./preferences.js?v=github-2'");
 page=page.replace("navigator.serviceWorker.register('/sw.js')","navigator.serviceWorker.register('./sw.js',{scope:'./'})");
 page=page.replace("fetch('/api/timetable'","fetch('./data/timetable.json?check='+Date.now()");
 page=page.replace('const result=await res.json();','const result=await res.json();result.fresh=!result.testFixture&&Date.now()-new Date(result.retrievedAt).getTime()<=20*60000;');
@@ -61,23 +61,36 @@ page=page.replace('href="./calendar.ics"','href="./calendars/all-all.ics"');
 page=page.replace('<p>可加 ?subgroup=1&amp;language=ru 只保留第 1 组、俄语课程及公共课。<br>Параметры ?subgroup=1&amp;language=ru оставляют подгруппу 1, русский язык и общие занятия.</p>','<button id="copybilingualcal" class="syncbtn">复制当前分组的双语订阅地址 / Скопировать адрес подписки</button><p>更改上面的分组与语言筛选后，再复制对应地址到苹果“日历”的订阅日历中。<br>Выберите подгруппу и язык, затем скопируйте адрес в подписку Apple.</p>');
 page=page.replace(' applyLanguage();\n}'," const cal=$('bilingualcal');if(cal)cal.href=new URL('./calendars/'+$('subgroup').value+'-'+$('language').value+'.ics',location.href).href;\n applyLanguage();\n}");
 page=page.replace("$('copycal').onclick=", "$('copybilingualcal').onclick=async()=>{try{await navigator.clipboard.writeText($('bilingualcal').href);toast(tr('已复制双语订阅地址','Адрес подписки скопирован'));}catch{toast($('bilingualcal').href)}};\n$('copycal').onclick=");
+const helpSections=/<details id="help">[\s\S]*?<\/details>\s*<details>[\s\S]*?<\/details>/;
+if(!helpSections.test(page))throw new Error('Missing help and calendar sections');
+page=page.replace(helpSections,`<details id="help" data-fixed-language="zh"><summary>iPhone 使用与同步说明</summary>
+<p><b>添加到主屏幕</b><br>用 Safari 打开本页，轻点共享 → 添加到主屏幕 → 打开“作为网页 App 打开” → 添加。</p>
+<p>后台目标每 5 分钟检查学校课表，定时检查和发布偶有延迟。打开页面、重新联网、返回前台和前台每 5 分钟读取最近发布的数据；按钮不会强制学校立即更新。数据超过 20 分钟未同步时会显示提醒。</p></details>
+<details id="apple-calendar" data-fixed-language="zh"><summary>苹果日历</summary>
+<p>学校俄文订阅：点击下面按钮，或在苹果“日历”→“添加日历”→“添加订阅日历”中粘贴地址。</p>
+<a class="calendarlink" href="webcal://ruz.narfu.ru/?icalendar&oid=20991&cod=111621">订阅学校日历 ↗</a><button id="copycal" class="syncbtn">复制官方订阅地址</button>
+<p>官方订阅含全部分组，内容为俄文；刷新由苹果日历控制，本站筛选不影响它。</p>
+<button id="downloadcal" class="syncbtn">导出双语 .ics</button><p>导出是当前筛选的快照，不自动更新；含课程、老师和楼址的中俄双语。</p>
+<p>双语自动订阅：按当前分组选择生成专用日历地址，只覆盖学校网页当前六周。苹果决定订阅刷新时间。</p><a class="calendarlink" id="bilingualcal" href="./calendars/all-all.ics">双语订阅地址</a>
+<button id="copybilingualcal" class="syncbtn">复制当前分组的双语订阅地址</button><p>更改上面的分组与语言筛选后，再复制对应地址到苹果“日历”的订阅日历中。</p></details>`);
+page=page.replace('<br><a href="https://ruz.narfu.ru/?timetable&group=20991" target="_blank" rel="noopener">学校课表 / Оригинал ↗</a>','');
 await fs.writeFile(path.join(output,'index.html'),page);
 const originalPref=await(await worker.fetch(new Request(base+'/preferences.js'),{},{})).text();
-const languagePart=originalPref.slice(0,originalPref.indexOf(' const selectedMinutes='));
+const languagePart=originalPref.slice(0,originalPref.indexOf(' const selectedMinutes=')).replace('script,style,textarea,option[data-i18n-zh]','script,style,textarea,option[data-i18n-zh],[data-fixed-language]');
 const pref=languagePart+`
- window.openPreferences=async()=>{try{if(!$('preferences')){const r=await fetch('./settings.html?v=github-1');if(!r.ok)throw new Error();$('settings-slot').innerHTML=await r.text();$('ui-language').onchange=()=>{uiLanguage=$('ui-language').value;store.set('narfu-ui-language',uiLanguage);render();};}$('ui-language').value=uiLanguage;applyLanguage();$('preferences').showModal();}catch{toast(tr('设置暂时无法加载，请重试','Не удалось загрузить настройки. Повторите позже.'));}};
+ window.openPreferences=async()=>{try{if(!$('preferences')){const r=await fetch('./settings.html?v=github-2');if(!r.ok)throw new Error();$('settings-slot').innerHTML=await r.text();$('ui-language').onchange=()=>{uiLanguage=$('ui-language').value;store.set('narfu-ui-language',uiLanguage);render();};}$('ui-language').value=uiLanguage;applyLanguage();$('preferences').showModal();}catch{toast(tr('设置暂时无法加载，请重试','Не удалось загрузить настройки. Повторите позже.'));}};
  applyLanguage();render();
 })();
 `;
 await fs.writeFile(path.join(output,'preferences.js'),pref);
 const originalSettings=await(await worker.fetch(new Request(base+'/settings.html'),{},{})).text();
 const style=originalSettings.match(/<style>[\s\S]*?<\/style>/)[0];
-const settings=style+`<dialog id="preferences" class="settings-dialog"><div class="settings-heading"><h2>设置 / Настройки</h2><button class="settings-close" onclick="this.closest('dialog').close()" aria-label="关闭 / Закрыть">×</button></div><label for="ui-language">显示语言 / Язык интерфейса</label><select id="ui-language"><option value="both">中俄双语 / 中文 + Русский</option><option value="zh">中文 / Китайский</option><option value="ru">Русский / 俄语</option></select><h3>锁屏提醒 / Напоминания</h3><p>可在苹果日历订阅课表，并在系统日历中设置提醒。GitHub 网页本身不提供锁屏系统推送；旧站已开启的提醒继续由旧后台运行。</p><p lang="ru">Подпишитесь на расписание в Apple и настройте напоминания в системном календаре. Этот сайт GitHub не отправляет push; ранее включённые уведомления старого сайта продолжают работать через прежний сервер.</p><a class="calendarlink" href="webcal://ruz.narfu.ru/?icalendar&oid=20991&cod=111621">订阅学校日历 / Подписаться на календарь</a><button onclick="this.closest('dialog').close()">完成 / Готово</button></dialog>`;
+const settings=style+`<dialog id="preferences" class="settings-dialog"><div class="settings-heading"><h2>设置 / Настройки</h2><button class="settings-close" onclick="this.closest('dialog').close()" aria-label="关闭 / Закрыть">×</button></div><label for="ui-language">显示语言 / Язык интерфейса</label><select id="ui-language"><option value="both">中俄双语 / 中文 + Русский</option><option value="zh">中文 / Китайский</option><option value="ru">Русский / 俄语</option></select><a class="calendarlink" href="https://ruz.narfu.ru/?timetable&group=20991" target="_blank" rel="noopener">查看学校原始课表 / Оригинал расписания ↗</a><button onclick="this.closest('dialog').close()">完成 / Готово</button></dialog>`;
 await fs.writeFile(path.join(output,'settings.html'),settings);
 for(const name of ['logo.svg','icon.svg','icon.png','icon-192.png','icon-512.png']){const r=await worker.fetch(new Request(base+'/'+name),{},{});if(!r.ok)throw new Error('Missing asset '+name);await fs.writeFile(path.join(output,name),Buffer.from(await r.arrayBuffer()));}
 await fs.writeFile(path.join(output,'manifest.webmanifest'),JSON.stringify({id:'./',name:'САФУ · 中俄双语课表',short_name:'NArFU课表',lang:'zh-CN',start_url:'./',scope:'./',display:'standalone',background_color:'#f5f4ee',theme_color:'#174e45',icons:[{src:'./icon-192.png?v=8',sizes:'192x192',type:'image/png',purpose:'any'},{src:'./icon-512.png?v=8',sizes:'512x512',type:'image/png',purpose:'any'}]}));
 for(const subgroup of ['all','1','2'])for(const language of ['all','ru','en','de'])await fs.writeFile(path.join(output,'calendars',subgroup+'-'+language+'.ics'),toICS(data,subgroup,language));
-const sw=`const CACHE='narfu-gh-shell-v2';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=github-1','./settings.html?v=github-1'].map(p=>new URL(p,BASE).href);
+const sw=`const CACHE='narfu-gh-shell-v3';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=github-2','./settings.html?v=github-2'].map(p=>new URL(p,BASE).href);
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));});
 self.addEventListener('activate',event=>event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('narfu-gh-shell-')&&k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));
 self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==BASE.origin||!u.pathname.startsWith(BASE.pathname)||u.pathname.includes('/data/')||u.pathname.includes('/calendars/'))return;event.respondWith(caches.open(CACHE).then(async cache=>{const saved=await cache.match(event.request);const network=fetch(event.request).then(r=>{if(r.ok){const copy=r.clone();event.waitUntil(cache.put(event.request,copy));}return r;});if(saved){event.waitUntil(network.catch(()=>{}));return saved;}return network.catch(()=>new Response('首次打开请联网 / Для первого запуска нужен Интернет',{status:503}));}));});`;
