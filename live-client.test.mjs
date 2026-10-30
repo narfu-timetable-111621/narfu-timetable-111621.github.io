@@ -33,3 +33,12 @@ test('the download uses the displayed data, with explicit Moscow-to-UTC time con
  assert.ok(ics.includes('DTSTART:'+scope.data.events[0].date.replaceAll('-','')+'T040000Z'));
  assert.ok(page.includes("new Blob([toICS(data,$('subgroup').value,$('language').value)]"));
 });
+test('service worker activation finishes even if a page navigation never settles',async()=>{
+ const listeners=new Map(),deleted=[];let claimed=0,activation;
+ const self={location:{href:'https://narfu-timetable-111621.github.io/sw.js'},addEventListener:(name,fn)=>listeners.set(name,fn),clients:{claim:async()=>{claimed++;},matchAll:async()=>[{url:'https://narfu-timetable-111621.github.io/',navigate:()=>new Promise(()=>{})}]}};
+ const scope=vm.createContext({self,URL,caches:{keys:async()=>['narfu-gh-shell-v3','narfu-gh-shell-v5'],delete:async key=>deleted.push(key)}});
+ vm.runInContext(await fs.readFile(new URL('./docs/sw.js',import.meta.url),'utf8'),scope);
+ listeners.get('activate')({waitUntil:promise=>{activation=promise;}});
+ let timer;try{await Promise.race([activation,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Activation blocked by page navigation')),500);})]);}finally{clearTimeout(timer);}
+ assert.equal(claimed,1);assert.deepEqual(deleted,['narfu-gh-shell-v3']);
+});
