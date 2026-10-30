@@ -39,7 +39,7 @@ function status(mode,error){
  $('synctitle').classList.toggle('warn',outdated);
  const labels={fresh:['已读取最新发布课表','Загружена последняя публикация'],loading:['正在读取课表','Загрузка расписания'],stale:['后台更新延迟 · 显示已保存课表','Обновление задерживается · Сохранённое расписание'],offline:['离线课表','Нет сети'],error:['课表读取失败 · 显示已保存课表','Ошибка загрузки · Сохранённое расписание']};
  const label=labels[mode]||labels.error;$('syncstate').textContent=tr(...label);
- $('synctime').textContent=(data?tr('学校数据获取：','Данные САФУ получены: ')+stamp(data.retrievedAt)+' MSK\n':'')+(lastSuccess?tr('网页最近读取：','Последняя загрузка: ')+stamp(new Date(lastSuccess).toISOString())+' MSK\n':'');
+ $('synctime').textContent=(data?tr('学校数据获取：','Данные САФУ получены: ')+stamp(data.retrievedAt)+' MSK\n':'')+(lastSuccess?tr('网页最近读取：','Последняя загрузка: ')+stamp(new Date(lastSuccess).toISOString())+' MSK\n':'')+(data?.sourceStatus?tr('学校状态：','Статус САФУ: ')+data.sourceStatus:'');
  $('synctime').style.whiteSpace='pre-line';
  const saved=data?stamp(data.retrievedAt)+' MSK':'';
  const messages={fresh:'',loading:tr('正在读取最新发布的数据，暂显示已保存课表。','Загружаем последнюю публикацию; пока показано сохранённое расписание.'),stale:tr('后台自动更新延迟，学校数据最后获取于 '+saved+'。当前显示已保存课表；临时改课请核对学校官网。','Автообновление задерживается. Данные САФУ получены '+saved+'. Показано сохранённое расписание; срочные изменения проверьте на сайте САФУ.'),offline:tr('当前离线，显示已保存课表。重新联网后自动读取。','Нет сети. Показано сохранённое расписание; загрузка возобновится при подключении.'),error:tr('暂时无法读取课表文件，显示已保存课表。请联网后重试。','Не удалось загрузить файл расписания. Показаны сохранённые данные; проверьте подключение и повторите.')};
