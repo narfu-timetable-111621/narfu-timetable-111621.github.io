@@ -7,7 +7,7 @@ async function sync(){
   const res=await fetch(url.href,{cache:'no-store',credentials:'omit',headers:{Accept:'application/json'},signal:AbortSignal.timeout(23000)});
   if(!res.ok)throw new Error('HTTP '+res.status);
   const result=await res.json(),retrieved=Date.parse(result.retrievedAt);
-  if(result.groupId!=='20991'||result.sourceUrl!=='https://ruz.narfu.ru/?timetable&group=20991'||result.via!=='live-proxy'||result.fresh!==true||!Array.isArray(result.events)||!Array.isArray(result.weeks)||!result.weeks.length||!Number.isFinite(retrieved)||Date.now()-retrieved>60000||retrieved-Date.now()>60000||!result.events.every(e=>e.date&&e.start&&e.end&&e.title))throw new Error('Unverified live timetable');
+  if(result.sourceFormat!=='icalendar'||result.groupId!=='20991'||result.sourceUrl!=='https://ruz.narfu.ru/?timetable&group=20991'||result.via!=='live-proxy'||result.fresh!==true||!Array.isArray(result.events)||!Array.isArray(result.weeks)||!result.weeks.length||!Number.isFinite(retrieved)||Date.now()-retrieved>60000||retrieved-Date.now()>60000||!result.events.every(e=>e.date&&e.start&&e.end&&e.title))throw new Error('Unverified live timetable');
   data=result;store.set('narfu-timetable-v1',JSON.stringify(data));lastSuccess=Date.now();store.set('narfu-success',String(lastSuccess));render();status('fresh');
  }catch(e){render();status(navigator.onLine?'error':'offline',e.name==='TimeoutError'?'连接超时 / Время ожидания истекло':'本次未能获取学校最新课表 / Не удалось обновить расписание САФУ');}
  finally{busy=false;$('refresh').disabled=false;}

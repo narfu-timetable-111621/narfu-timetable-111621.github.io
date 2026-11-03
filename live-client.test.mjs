@@ -25,6 +25,10 @@ test('old published JSON cannot be reported as a live school update',async()=>{
  const {scope,elements,cached}=context(async()=>Response.json({...template,fresh:true,via:'github-actions'}));
  await scope.sync();assert.equal(scope.data,cached);assert.match(elements.get('notice').textContent,/旧数据/);
 });
+test('an old six-week backend cannot replace an already loaded full calendar',async()=>{
+ const {scope,elements,cached}=context(async()=>Response.json({...liveData('07:00'),sourceFormat:undefined}));
+ await scope.sync();assert.equal(scope.data,cached);assert.match(elements.get('notice').textContent,/旧数据/);
+});
 test('the download uses the displayed data, with explicit Moscow-to-UTC time conversion',async()=>{
  const {scope}=context(async()=>Response.json(liveData('07:00')));await scope.sync();
  scope.enrichEvent=e=>e;scope.TextEncoder=TextEncoder;
