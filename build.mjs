@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import worker,{SOURCE,parseTimetable,enrichEvent,toICS} from './worker.mjs';
+import worker from './worker.mjs';
+import {SOURCE,OFFICIAL_CALENDAR,toICS} from './school.mjs';
+import {parseCalendar} from './calendar.mjs';
 import {wireLiveSync} from './live-client.mjs';
 const liveConfig=JSON.parse(await fs.readFile(new URL('./live-sync.json',import.meta.url),'utf8'));
 const root=path.resolve(import.meta.dirname);
@@ -13,21 +15,21 @@ if(fixture){if(process.env.GITHUB_ACTIONS)throw new Error('Test fixtures cannot 
 else{
  let failure;
  for(let attempt=0;attempt<2;attempt++){
-  try{const r=await fetch(SOURCE,{headers:{'User-Agent':'Mozilla/5.0','Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'},signal:AbortSignal.timeout(20000)});if(!r.ok)throw new Error('School HTTP '+r.status);html=await r.text();if(html.length>2000000)throw new Error('Unexpected school page size');break;}catch(e){failure=e;}
+  try{const r=await fetch(OFFICIAL_CALENDAR,{headers:{'User-Agent':'Mozilla/5.0','Accept':'text/calendar'},cache:'no-store',signal:AbortSignal.timeout(20000)});if(!r.ok)throw new Error('School HTTP '+r.status);html=await r.text();if(html.length>2000000)throw new Error('Unexpected school page size');break;}catch(e){failure=e;}
  }
  if(!html)throw failure;
 }
-const parsed=parseTimetable(html);
+const parsed=parseCalendar(html);
 if(!parsed.events.length||!parsed.weeks.length)throw new Error('No valid school schedule; keep the previous deployment');
 const now=new Date().toISOString();
-const data={...parsed,events:parsed.events.map(enrichEvent),retrievedAt:now,checkedAt:now,fresh:true,via:'github-actions',testFixture:!!fixture};
+const data={...parsed,events:parsed.events,retrievedAt:now,checkedAt:now,fresh:true,via:'github-actions',testFixture:!!fixture};
 await fs.writeFile(path.join(output,'data/timetable.json'),JSON.stringify(data));
 const base='https://timetable.invalid';
 let page=await(await worker.fetch(new Request(base+'/'),{},{})).text();
 const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const mondayDate=new Date(today+'T12:00:00Z');mondayDate.setUTCDate(mondayDate.getUTCDate()-(mondayDate.getUTCDay()+6)%7);const monday=mondayDate.toISOString().slice(0,10),start=data.weeks.includes(monday)?monday:data.weeks[0];
 const endDate=new Date(start+'T12:00:00Z');endDate.setUTCDate(endDate.getUTCDate()+6);const end=endDate.toISOString().slice(0,10);
-const seed={...data,weeks:[start],days:data.days.filter(d=>d>=start&&d<=end),events:data.events.filter(e=>e.date>=start&&e.date<=end),fresh:false,via:'preloaded-week'};
+const seed={...data,fresh:false,via:'preloaded-calendar'};
 page=page.replace(/^const BOOTSTRAP_DATA=.+;$/m,'const BOOTSTRAP_DATA='+JSON.stringify(seed)+';');
 // Every local resource is relative, for both organization roots and project sites.
 page=page.replaceAll('src="/','src="./').replaceAll('href="/','href="./');
@@ -57,7 +59,7 @@ page=page.replace("fetch('/calendar.ics?subgroup='+$('subgroup').value+'&languag
 page=page.replace('↻ 立即检查更新 / Обновить','↻ 获取最新课表 / Обновить');
 page=page.replace('打开页面、重新联网、返回前台（距上次检查超过 1 分钟）和前台每 5 分钟自动检查；服务器最多缓存 2 分钟。网页关闭后不持续检查，不发送通知。','后台目标每 5 分钟检查学校课表，定时检查和发布偶有延迟。打开页面、重新联网、返回前台和前台每 5 分钟读取最近发布的数据；按钮不会强制学校立即更新。数据超过 20 分钟未同步时会显示提醒。');
 page=page.replace('Проверка при открытии, восстановлении сети, возврате в приложение (через 1 минуту) и каждые 5 минут на экране. Кэш сервера — до 2 минут. В закрытом приложении проверка не работает, уведомления не отправляются.','Сервер проверяет расписание примерно каждые 5 минут; проверка и публикация могут задерживаться. Страница загружает последние опубликованные данные при открытии и каждые 5 минут. При задержке более 20 минут появляется предупреждение.');
-page=page.replace('双语自动订阅：在苹果日历添加本站 /calendar.ics 地址；只覆盖学校网页当前六周。','双语自动订阅：按当前分组选择生成专用日历地址，只覆盖学校网页当前六周。苹果决定订阅刷新时间。');
+page=page.replace('双语自动订阅：在苹果日历添加本站 /calendar.ics 地址；覆盖学校订阅日历中已发布的全部日期。','双语自动订阅：按当前分组选择生成专用日历地址，覆盖学校订阅日历中已发布的全部日期。苹果决定订阅刷新时间。');
 page=page.replace('Двуязычная подписка: добавьте адрес этого сайта с /calendar.ics; охватывает текущие шесть недель.','Двуязычная подписка учитывает выбранные фильтры и текущие шесть недель. Частоту обновления подписки определяет Apple.');
 page=page.replace('href="./calendar.ics"','href="./calendars/all-all.ics"');
 page=page.replace('<p>可加 ?subgroup=1&amp;language=ru 只保留第 1 组、俄语课程及公共课。<br>Параметры ?subgroup=1&amp;language=ru оставляют подгруппу 1, русский язык и общие занятия.</p>','<button id="copybilingualcal" class="syncbtn">复制当前分组的双语订阅地址 / Скопировать адрес подписки</button><p>更改上面的分组与语言筛选后，再复制对应地址到苹果“日历”的订阅日历中。<br>Выберите подгруппу и язык, затем скопируйте адрес в подписку Apple.</p>');
@@ -73,10 +75,15 @@ page=page.replace(helpSections,`<details id="help" data-fixed-language="zh"><sum
 <a class="calendarlink" href="webcal://ruz.narfu.ru/?icalendar&oid=20991&cod=111621">订阅学校日历 ↗</a><button id="copycal" class="syncbtn">复制官方订阅地址</button>
 <p>官方订阅含全部分组，内容为俄文；刷新由苹果日历控制，本站筛选不影响它。</p>
 <button id="downloadcal" class="syncbtn">导出双语 .ics</button><p>导出是当前筛选的快照，不自动更新；含课程、老师和楼址的中俄双语。</p>
-<p>双语自动订阅：按当前分组选择生成专用日历地址，只覆盖学校网页当前六周。苹果决定订阅刷新时间。</p><a class="calendarlink" id="bilingualcal" href="./calendars/all-all.ics">双语订阅地址</a>
+<p>双语自动订阅：按当前分组选择生成专用日历地址，覆盖学校订阅日历中已发布的全部日期。苹果决定订阅刷新时间。</p><a class="calendarlink" id="bilingualcal" href="./calendars/all-all.ics">双语订阅地址</a>
 <button id="copybilingualcal" class="syncbtn">复制当前分组的双语订阅地址</button><p>更改上面的分组与语言筛选后，再复制对应地址到苹果“日历”的订阅日历中。</p></details>`);
 page=page.replace('<br><a href="https://ruz.narfu.ru/?timetable&group=20991" target="_blank" rel="noopener">学校课表 / Оригинал ↗</a>','');
 if(liveConfig.endpoint)page=await wireLiveSync(page,liveConfig.endpoint);
+// Preserve the complete feed's exam labels and room/teacher metadata when rendering.
+page=page.replace('kindZh:kindChinese(e.kind)','kindZh:e.kindZh||kindChinese(e.kind)').replace('locationZh:locationChinese(e.location)','locationZh:e.locationZh||locationChinese(e.location)');
+page=page.replace('该周数据尚未载入或学校尚未发布，请等待同步或切换周次。','该周超出学校订阅日历当前发布范围，请获取最新课表或切换日期。');
+page=page.replace("$('weekcount').textContent=", "$('weekcount').textContent=");
+
 await fs.writeFile(path.join(output,'index.html'),page);
 const originalPref=await(await worker.fetch(new Request(base+'/preferences.js'),{},{})).text();
 const languagePart=originalPref.slice(0,originalPref.indexOf(' const selectedMinutes=')).replace('script,style,textarea,option[data-i18n-zh]','script,style,textarea,option[data-i18n-zh],[data-fixed-language]');
@@ -93,10 +100,10 @@ await fs.writeFile(path.join(output,'settings.html'),settings);
 for(const name of ['logo.svg','icon.svg','icon.png','icon-192.png','icon-512.png']){const r=await worker.fetch(new Request(base+'/'+name),{},{});if(!r.ok)throw new Error('Missing asset '+name);await fs.writeFile(path.join(output,name),Buffer.from(await r.arrayBuffer()));}
 await fs.writeFile(path.join(output,'manifest.webmanifest'),JSON.stringify({id:'./',name:'САФУ · 中俄双语课表',short_name:'NArFU课表',lang:'zh-CN',start_url:'./',scope:'./',display:'standalone',background_color:'#f5f4ee',theme_color:'#174e45',icons:[{src:'./icon-192.png?v=8',sizes:'192x192',type:'image/png',purpose:'any'},{src:'./icon-512.png?v=8',sizes:'512x512',type:'image/png',purpose:'any'}]}));
 for(const subgroup of ['all','1','2'])for(const language of ['all','ru','en','de'])await fs.writeFile(path.join(output,'calendars',subgroup+'-'+language+'.ics'),toICS(data,subgroup,language));
-const sw=`const CACHE='narfu-gh-shell-${liveConfig.endpoint?'v5':'v3'}';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=github-2','./settings.html?v=github-2'].map(p=>new URL(p,BASE).href);
+const sw=`const CACHE='narfu-gh-shell-v6';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=github-2','./settings.html?v=github-2'].map(p=>new URL(p,BASE).href);
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));});
 self.addEventListener('activate',event=>event.waitUntil((async()=>{const keys=await caches.keys(),old=keys.filter(k=>k.startsWith('narfu-gh-shell-')&&k!==CACHE);await Promise.all(old.map(k=>caches.delete(k)));await self.clients.claim();})()));
-self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==BASE.origin||!u.pathname.startsWith(BASE.pathname)||u.pathname.includes('/data/')||u.pathname.includes('/calendars/'))return;event.respondWith(caches.open(CACHE).then(async cache=>{const saved=await cache.match(event.request);const network=fetch(event.request).then(r=>{if(r.ok){const copy=r.clone();event.waitUntil(cache.put(event.request,copy));}return r;});if(saved){event.waitUntil(network.catch(()=>{}));return saved;}return network.catch(()=>new Response('首次打开请联网 / Для первого запуска нужен Интернет',{status:503}));}));});`;
+self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==BASE.origin||!u.pathname.startsWith(BASE.pathname)||u.pathname.includes('/data/')||u.pathname.includes('/calendars/')||u.pathname.startsWith('/api/'))return;event.respondWith(caches.open(CACHE).then(async cache=>{try{const response=await fetch(event.request);if(response.ok){const copy=response.clone();event.waitUntil(cache.put(event.request,copy));}return response;}catch{const saved=await cache.match(event.request);return saved||new Response('首次打开请联网 / Для первого запуска нужен Интернет',{status:503});}}));});`;
 await fs.writeFile(path.join(output,'sw.js'),sw);await fs.writeFile(path.join(output,'.nojekyll'),'');
 await fs.writeFile(path.join(output,'robots.txt'),'User-agent: *\nDisallow: /\n');
 console.log(JSON.stringify({events:data.events.length,weeks:data.weeks.length,schoolCheckedAt:now,testFixture:!!fixture,output:'docs'}));
