@@ -33,7 +33,7 @@ const seed={...data,fresh:false,via:'preloaded-calendar'};
 page=page.replace(/^const BOOTSTRAP_DATA=.+;$/m,'const BOOTSTRAP_DATA='+JSON.stringify(seed)+';');
 // Every local resource is relative, for both organization roots and project sites.
 page=page.replaceAll('src="/','src="./').replaceAll('href="/','href="./');
-page=page.replace("script.src='/preferences.js?v=6'","script.src='./preferences.js?v=github-2'");
+page=page.replace("script.src='/preferences.js?v=6'","script.src='./preferences.js?v=push-1'");
 page=page.replace("navigator.serviceWorker.register('/sw.js')","navigator.serviceWorker.register('./sw.js',{scope:'./'})");
 page=page.replace("fetch('/api/timetable'","fetch('./data/timetable.json?check='+Date.now()");
 page=page.replace('const result=await res.json();','const result=await res.json();result.fresh=!result.testFixture&&Date.now()-new Date(result.retrievedAt).getTime()<=20*60000;');
@@ -84,26 +84,31 @@ page=page.replace('kindZh:kindChinese(e.kind)','kindZh:e.kindZh||kindChinese(e.k
 page=page.replace('该周数据尚未载入或学校尚未发布，请等待同步或切换周次。','该周超出学校订阅日历当前发布范围，请获取最新课表或切换日期。');
 page=page.replace("$('weekcount').textContent=", "$('weekcount').textContent=");
 
+page=page.replace('let data=BOOTSTRAP_DATA,selected=todayMSK()',`const requestedDate=new URL(location.href).searchParams.get('date');
+let data=BOOTSTRAP_DATA,selected=/^\\d{4}-\\d{2}-\\d{2}$/.test(requestedDate||'')&&Number.isFinite(Date.parse(requestedDate+'T12:00:00Z'))?requestedDate:todayMSK()`);
 await fs.writeFile(path.join(output,'index.html'),page);
 const originalPref=await(await worker.fetch(new Request(base+'/preferences.js'),{},{})).text();
 const languagePart=originalPref.slice(0,originalPref.indexOf(' const selectedMinutes=')).replace('script,style,textarea,option[data-i18n-zh]','script,style,textarea,option[data-i18n-zh],[data-fixed-language]');
-const pref=languagePart+`
- window.openPreferences=async()=>{try{if(!$('preferences')){const r=await fetch('./settings.html?v=github-2');if(!r.ok)throw new Error();$('settings-slot').innerHTML=await r.text();$('ui-language').onchange=()=>{uiLanguage=$('ui-language').value;store.set('narfu-ui-language',uiLanguage);render();};}$('ui-language').value=uiLanguage;applyLanguage();$('preferences').showModal();}catch{toast(tr('设置暂时无法加载，请重试','Не удалось загрузить настройки. Повторите позже.'));}};
+const pushClient=await fs.readFile(new URL('./push-client.js',import.meta.url),'utf8');
+const pref=languagePart+pushClient+`
+ window.openPreferences=async()=>{try{if(!$('preferences')){const r=await fetch('./settings.html?v=push-1');if(!r.ok)throw new Error();$('settings-slot').innerHTML=await r.text();$('ui-language').onchange=()=>{uiLanguage=$('ui-language').value;store.set('narfu-ui-language',uiLanguage);render();window.savePushIfConnected?.();};}$('ui-language').value=uiLanguage;applyLanguage();$('preferences').showModal();await window.initPushSettings();}catch{toast(tr('设置暂时无法加载，请重试','Не удалось загрузить настройки. Повторите позже.'));}};
  applyLanguage();render();
 })();
 `;
 await fs.writeFile(path.join(output,'preferences.js'),pref);
 const originalSettings=await(await worker.fetch(new Request(base+'/settings.html'),{},{})).text();
 const style=originalSettings.match(/<style>[\s\S]*?<\/style>/)[0];
-const settings=style+`<dialog id="preferences" class="settings-dialog"><div class="settings-heading"><h2>设置 / Настройки</h2><button class="settings-close" onclick="this.closest('dialog').close()" aria-label="关闭 / Закрыть">×</button></div><label for="ui-language">显示语言 / Язык интерфейса</label><select id="ui-language"><option value="both">中俄双语 / 中文 + Русский</option><option value="zh">中文 / Китайский</option><option value="ru">Русский / 俄语</option></select><a class="calendarlink" href="https://ruz.narfu.ru/?timetable&group=20991" target="_blank" rel="noopener">查看学校原始课表 / Оригинал расписания ↗</a><button onclick="this.closest('dialog').close()">完成 / Готово</button></dialog>`;
+const pushSettings=await fs.readFile(new URL('./push-settings.html',import.meta.url),'utf8');
+const settings=style+`<dialog id="preferences" class="settings-dialog"><div class="settings-heading"><h2>设置 / Настройки</h2><button class="settings-close" onclick="this.closest('dialog').close()" aria-label="关闭 / Закрыть">×</button></div><label for="ui-language">显示语言 / Язык интерфейса</label><select id="ui-language"><option value="both">中俄双语 / 中文 + Русский</option><option value="zh">中文 / Китайский</option><option value="ru">Русский / 俄语</option></select>${pushSettings}<a class="calendarlink" href="https://ruz.narfu.ru/?timetable&group=20991" target="_blank" rel="noopener">查看学校原始课表 / Оригинал расписания ↗</a><button onclick="this.closest('dialog').close()">完成 / Готово</button></dialog>`;
 await fs.writeFile(path.join(output,'settings.html'),settings);
 for(const name of ['logo.svg','icon.svg','icon.png','icon-192.png','icon-512.png']){const r=await worker.fetch(new Request(base+'/'+name),{},{});if(!r.ok)throw new Error('Missing asset '+name);await fs.writeFile(path.join(output,name),Buffer.from(await r.arrayBuffer()));}
 await fs.writeFile(path.join(output,'manifest.webmanifest'),JSON.stringify({id:'./',name:'САФУ · 中俄双语课表',short_name:'NArFU课表',lang:'zh-CN',start_url:'./',scope:'./',display:'standalone',background_color:'#f5f4ee',theme_color:'#174e45',icons:[{src:'./icon-192.png?v=8',sizes:'192x192',type:'image/png',purpose:'any'},{src:'./icon-512.png?v=8',sizes:'512x512',type:'image/png',purpose:'any'}]}));
 for(const subgroup of ['all','1','2'])for(const language of ['all','ru','en','de'])await fs.writeFile(path.join(output,'calendars',subgroup+'-'+language+'.ics'),toICS(data,subgroup,language));
-const sw=`const CACHE='narfu-gh-shell-v6';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=github-2','./settings.html?v=github-2'].map(p=>new URL(p,BASE).href);
+const sw=`const CACHE='narfu-gh-shell-v7';const BASE=new URL('./',self.location.href);const CORE=['./','./manifest.webmanifest','./logo.svg?v=8','./icon.png?v=8','./preferences.js?v=push-1','./settings.html?v=push-1'].map(p=>new URL(p,BASE).href);
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));});
 self.addEventListener('activate',event=>event.waitUntil((async()=>{const keys=await caches.keys(),old=keys.filter(k=>k.startsWith('narfu-gh-shell-')&&k!==CACHE);await Promise.all(old.map(k=>caches.delete(k)));await self.clients.claim();})()));
 self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==BASE.origin||!u.pathname.startsWith(BASE.pathname)||u.pathname.includes('/data/')||u.pathname.includes('/calendars/')||u.pathname.startsWith('/api/'))return;event.respondWith(caches.open(CACHE).then(async cache=>{try{const response=await fetch(event.request);if(response.ok){const copy=response.clone();event.waitUntil(cache.put(event.request,copy));}return response;}catch{const saved=await cache.match(event.request);return saved||new Response('首次打开请联网 / Для первого запуска нужен Интернет',{status:503});}}));});`;
-await fs.writeFile(path.join(output,'sw.js'),sw);await fs.writeFile(path.join(output,'.nojekyll'),'');
+const pushSW=await fs.readFile(new URL('./push-sw.js',import.meta.url),'utf8');
+await fs.writeFile(path.join(output,'sw.js'),sw+'\n'+pushSW);await fs.writeFile(path.join(output,'.nojekyll'),'');
 await fs.writeFile(path.join(output,'robots.txt'),'User-agent: *\nDisallow: /\n');
 console.log(JSON.stringify({events:data.events.length,weeks:data.weeks.length,schoolCheckedAt:now,testFixture:!!fixture,output:'docs'}));

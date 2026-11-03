@@ -40,11 +40,11 @@ test('the download uses the displayed data, with explicit Moscow-to-UTC time con
 test('service worker activation finishes even if a page navigation never settles',async()=>{
  const listeners=new Map(),deleted=[];let claimed=0,activation;
  const self={location:{href:'https://narfu-timetable-111621.github.io/sw.js'},addEventListener:(name,fn)=>listeners.set(name,fn),clients:{claim:async()=>{claimed++;},matchAll:async()=>[{url:'https://narfu-timetable-111621.github.io/',navigate:()=>new Promise(()=>{})}]}};
- const scope=vm.createContext({self,URL,caches:{keys:async()=>['narfu-gh-shell-v3','narfu-gh-shell-v5','narfu-gh-shell-v6'],delete:async key=>deleted.push(key)}});
+ const scope=vm.createContext({self,URL,caches:{keys:async()=>['narfu-gh-shell-v3','narfu-gh-shell-v5','narfu-gh-shell-v6','narfu-gh-shell-v7'],delete:async key=>deleted.push(key)}});
  vm.runInContext(await fs.readFile(new URL('./docs/sw.js',import.meta.url),'utf8'),scope);
  listeners.get('activate')({waitUntil:promise=>{activation=promise;}});
  let timer;try{await Promise.race([activation,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Activation blocked by page navigation')),500);})]);}finally{clearTimeout(timer);}
- assert.equal(claimed,1);assert.deepEqual(deleted,['narfu-gh-shell-v3','narfu-gh-shell-v5']);
+ assert.equal(claimed,1);assert.deepEqual(deleted,['narfu-gh-shell-v3','narfu-gh-shell-v5','narfu-gh-shell-v6']);
 });
 test('a home-screen launch gets the updated page online and the saved page offline',async()=>{
  const listeners=new Map();let online=true,saved=new Response('previous page'),result;const pending=[];
